@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>8bit CPU Emulator Full</title>
+<style>
+body {
+    font-family: 'Courier New', monospace;
+    margin: 20px;
+    background-color: #f0f2f5;
+    color: #333;
+}
+
+h1, h2, h3 {
+    font-weight: bold;
+    color: #222;
+}
+
+textarea {
+    width: 100%;
+    height: 120px;
+    font-size: 14px;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #aaa;
+    box-shadow: 1px 1px 3px rgba(0,0,0,0.1);
+    resize: vertical;
+}
+
+button {
+    margin: 5px 0;
+    padding: 8px 15px;
+    border-radius: 6px;
+    border: none;
+    background-color: #4CAF50;
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 1px 2px 4px rgba(0,0,0,0.2);
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+table {
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    width: 100%;
+}
+
+th, td {
+    border: 1px solid #bbb;
+    padding: 6px;
+    text-align: center;
+    font-size: 13px;
+}
+
+.mem-table {
+    height: 250px;
+    overflow: auto;
+    display: block;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    padding: 5px;
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.mem-table div:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.mem-table div:nth-child(odd) {
+    background-color: #eef;
+}
+</style>
+</head>
+<body>
+
+<h1>8bit CPU Emulator</h1>
+<a class="button" href="index.html">トップに戻る</a>
+
+<h1>8bit CPU Emulator (Full Memory Map & All Instructions)</h1>
+
+<h2>ROM 初期化 (16KB)</h2>
+<textarea id="romInput" placeholder="例: 01 12 30 01 FF 00 ..."></textarea>
+<button onclick="loadROM()">ROMロード</button>
+
+<h2>RAM 初期化 (32KB)</h2>
+<textarea id="ramInput" placeholder="例: 00 FF 12 ..."></textarea>
+<button onclick="loadRAM()">RAMロード</button>
+
+<h2>マシン語を実行</h2>
+<textarea id="program" placeholder="マシン語(16進数)を入力"></textarea>
+<br>
+<button onclick="runCPU()">実行</button>
+
+<h2>レジスタ状態</h2>
+<table>
+<tr><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>G</th><th>H</th><th>L</th></tr>
+<tr id="regs"><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+</table>
+
+<h2>16bitレジスタ</h2>
+<table>
+<tr><th>BC</th><th>DE</th><th>FG</th><th>HL</th><th>X</th><th>Y</th><th>J</th><th>PC</th><th>SP</th></tr>
+<tr id="regs16"><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+</table>
+
+<h2>FLAGS</h2>
+<table>
+<tr><th>Z</th><th>I</th><th>O</th><th>N</th><th>Q</th><th>C</th><th>H</th><th>S</th></tr>
+<tr id="flags"><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+</table>
+
+<h2>メモリ表示</h2>
+<h3>ROM (16KB, 0x0000〜0x3FFF)</h3>
+<div class="mem-table" id="romView"></div>
+<h3>RAM (32KB, 0x4000〜0xBFFF)</h3>
+<div class="mem-table" id="ramView"></div>
+<h3>I/O (16KB, 0xC000〜0xFFFF)</h3>
+<div class="mem-table" id="ioView"></div>
+
+<script>
+const cpu = {
+    regs8:{A:0,B:0,C:0,D:0,E:0,F:0,G:0,H:0,L:0},
+    regs16:{BC:0,DE:0,FG:0,HL:0,X:0,Y:0,J:0,PC:0,SP:0xBFFF},
+    flags:{Z:0,I:0,O:0,N:0,Q:0,C:0,H:0,S:0},
+    rom:new Uint8Array(0x4000),
+    ram:new Uint8Array(0x8000),
+    io:new Uint8Array(0x4000)
+};
+
+function updateUI(){
+    const r=cpu.regs8,r16=cpu.regs16,f=cpu.flags;
+    document.getElementById('regs').innerHTML=`<td>${r.A}</td><td>${r.B}</td><td>${r.C}</td><td>${r.D}</td><td>${r.E}</td><td>${r.F}</td><td>${r.G}</td><td>${r.H}</td><td>${r.L}</td>`;
+    document.getElementById('regs16').innerHTML=`<td>${r16.BC}</td><td>${r16.DE}</td><td>${r16.FG}</td><td>${r16.HL}</td><td>${r16.X}</td><td>${r16.Y}</td><td>${r16.J}</td><td>${r16.PC}</td><td>${r16.SP}</td>`;
+    document.getElementById('flags').innerHTML=`<td>${f.Z}</td><td>${f.I}</td><td>${f.O}</td><td>${f.N}</td><td>${f.Q}</td><td>${f.C}</td><td>${f.H}</td><td>${f.S}</td>`;
+    renderMemory();
+}
+
+function renderMemory(){
+    function memToHTML(mem,start){
+        let html=[];
+        for(let i=0;i<mem.length;i+=16){
+            html.push(`<div>0x${(start+i).toString(16).padStart(4,'0')}: ${Array.from(mem.slice(i,i+16)).map(b=>b.toString(16).padStart(2,'0')).join(' ')}</div>`);
+        }
+        return html.join('');
+    }
+    document.getElementById('romView').innerHTML=memToHTML(cpu.rom,0x0000);
+    document.getElementById('ramView').innerHTML=memToHTML(cpu.ram,0x4000);
+    document.getElementById('ioView').innerHTML=memToHTML(cpu.io,0xC000);
+}
+
+function loadROM(){const input=document.getElementById('romInput').value.trim().split(/\s+/).map(x=>parseInt(x,16)); cpu.rom.fill(0); input.forEach((b,i)=>{if(i<cpu.rom.length)cpu.rom[i]=b;}); updateUI();}
+function loadRAM(){const input=document.getElementById('ramInput').value.trim().split(/\s+/).map(x=>parseInt(x,16)); cpu.ram.fill(0); input.forEach((b,i)=>{if(i<cpu.ram.length)cpu.ram[i]=b;}); updateUI();}
+
+function readMemory(addr){if(addr<0x4000)return cpu.rom[addr]; else if(addr<0xC000)return cpu.ram[addr-0x4000]; else return cpu.io[addr-0xC000];}
+function writeMemory(addr,val){if(addr<0x4000)return; else if(addr<0xC000)cpu.ram[addr-0x4000]=val&0xFF; else{cpu.io[addr-0xC000]=val&0xFF; cpu.flags.I=1;}}
+
+// レジスタ取得
+function getReg8(op){const regs=['A','B','C','D','E','F','G','H','L']; return regs[op];}
+function getReg16(op){const regs16=['BC','DE','FG','HL','X','Y','J']; return regs16[op-0x09];}
+
+// スタック操作
+function push(val){writeMemory(cpu.regs16.SP--,val&0xFF);}
+function pop(){return readMemory(++cpu.regs16.SP);}
+
+// CPU実行
+function runCPU(){
+    const input=document.getElementById('program').value.trim().split(/\s+/).map(x=>parseInt(x,16));
+    cpu.rom.fill(0); input.forEach((b,i)=>{if(i<cpu.rom.length)cpu.rom[i]=b;});
+    cpu.regs16.PC=0; cpu.regs16.SP=0xBFFF; cpu.flags.I=0;
+
+    while(cpu.regs16.PC<cpu.rom.length){
+        let op=cpu.rom[cpu.regs16.PC++];
+        try{
+            switch(op){
+                case 0x01:{ // LOAD (BC,A,X,Y,J)
+                    let r=cpu.rom[cpu.regs16.PC++];
+                    let val=cpu.rom[cpu.regs16.PC++];
+                    if([0x09,0x0D,0x0E,0x0F].includes(r)) cpu.regs16[getReg16(r)]=val;
+                    else cpu.regs8[getReg8(r)]=val;
+                    cpu.flags.Z=(val===0?1:0); break;
+                }
+                case 0x02:{ // STORE (BC,A,X,Y -> HL)
+                    let r=cpu.rom[cpu.regs16.PC++];
+                    let addr=cpu.regs16.HL;
+                    if([0x09,0x0D,0x0E,0x0F].includes(r)) writeMemory(addr,cpu.regs16[getReg16(r)]&0xFF);
+                    else writeMemory(addr,cpu.regs8[getReg8(r)]); break;
+                }
+                case 0x03:{ // LOAD16
+                    let r16=getReg16(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs16[r16]=cpu.rom[cpu.regs16.PC++]|(cpu.rom[cpu.regs16.PC++]<<8); break;
+                }
+                case 0x04:{ // STORE16
+                    let r16=getReg16(cpu.rom[cpu.regs16.PC++]);
+                    let val=cpu.regs16[r16];
+                    writeMemory(cpu.regs16.HL,val&0xFF);
+                    writeMemory(cpu.regs16.HL+1,(val>>8)&0xFF);
+                    break;
+                }
+                case 0x10:{ // MOV8
+                    let dst=getReg8(cpu.rom[cpu.regs16.PC++]);
+                    let src=getReg8(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs8[dst]=cpu.regs8[src]; break;
+                }
+                case 0x11:{ // MOV16
+                    let dst=getReg16(cpu.rom[cpu.regs16.PC++]);
+                    let src=getReg16(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs16[dst]=cpu.regs16[src]; break;
+                }
+                case 0x30:{ // ADD
+                    let r=getReg8(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs8.A=(cpu.regs8.A+cpu.regs8[r])&0xFF;
+                    cpu.flags.Z=(cpu.regs8.A===0?1:0); break;
+                }
+                case 0x31:{ // SUB
+                    let r=getReg8(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs8.A=(cpu.regs8.A-cpu.regs8[r])&0xFF;
+                    cpu.flags.Z=(cpu.regs8.A===0?1:0); break;
+                }
+                case 0x32:{ // MUL
+                    let r=getReg8(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs8.A=(cpu.regs8.A*cpu.regs8[r])&0xFF; break;
+                }
+                case 0x33:{ // DIV
+                    let r=getReg8(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs8.A=Math.floor(cpu.regs8.A/cpu.regs8[r]); break;
+                }
+                case 0x34:{ // ADD16
+                    let r1=getReg16(cpu.rom[cpu.regs16.PC++]);
+                    let r2=getReg16(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs16[r1]=(cpu.regs16[r1]+cpu.regs16[r2])&0xFFFF; break;
+                }
+                case 0x35:{ // SUB16
+                    let r1=getReg16(cpu.rom[cpu.regs16.PC++]);
+                    let r2=getReg16(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs16[r1]=(cpu.regs16[r1]-cpu.regs16[r2])&0xFFFF; break;
+                }
+                case 0x36:{ // INC8
+                    let r=getReg8(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs8[r]=(cpu.regs8[r]+1)&0xFF; break;
+                }
+                case 0x37:{ // DEC8
+                    let r=getReg8(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs8[r]=(cpu.regs8[r]-1)&0xFF; break;
+                }
+                case 0x38:{ // INC16
+                    let r=getReg16(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs16[r]=(cpu.regs16[r]+1)&0xFFFF; break;
+                }
+                case 0x39:{ // DEC16
+                    let r=getReg16(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs16[r]=(cpu.regs16[r]-1)&0xFFFF; break;
+                }
+                case 0x40:{ // AND
+                    let r=getReg8(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs8.A&=cpu.regs8[r]; break;
+                }
+                case 0x41:{ // OR
+                    let r=getReg8(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs8.A|=cpu.regs8[r]; break;
+                }
+                case 0x42:{ // XOR
+                    let r=getReg8(cpu.rom[cpu.regs16.PC++]);
+                    cpu.regs8.A^=cpu.regs8[r]; break;
+                }
+                case 0x43:{ cpu.regs8.A=(~cpu.regs8.A)&0xFF; break; } // NOT
+                case 0xA0:{ let r=getReg8(cpu.rom[cpu.regs16.PC++]); push(cpu.regs8[r]); break; } // PUSH
+                case 0xA1:{ let r=getReg8(cpu.rom[cpu.regs16.PC++]); cpu.regs8[r]=pop(); break; } // POP
+                case 0xB0:{ cpu.flags.I=1; break; } // IN
+                case 0xB1:{ cpu.flags.I=1; break; } // OUT
+                case 0xFF:{ cpu.regs16.PC=cpu.rom[cpu.regs16.PC]|(cpu.rom[cpu.regs16.PC+1]<<8); break; } // JMP
+                default: updateUI(); return alert("未対応命令: 0x"+op.toString(16));
+            }
+        }catch(e){ alert("実行エラー:"+e); break; }
+    }
+    updateUI();
+}
+
+updateUI();
+</script>
+</body>
+</html>

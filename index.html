@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>8bit CPUアーキテクチャ設計書</title>
+<style>
+  body { font-family: Arial, sans-serif; line-height: 1.5; margin: 20px; }
+  h1, h2, h3 { color: #2c3e50; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 30px; }
+  th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+  th { background-color: #f4f4f4; }
+  code { background-color: #eee; padding: 2px 4px; border-radius: 3px; }
+  /* カテゴリ別背景色 */
+  .load { background-color: #f9ceaa; }         /* ロード系 */
+  .arith { background-color: #c0f2c0; }        /* 算術・論理演算系 */
+  .cmp { background-color: #ffedc2; }          /* 比較系 */
+  .jump { background-color: #d3f4d3; }         /* ジャンプ系 */
+  .shift { background-color: #c7c1f4; }        /* シフト・ローテート系 */
+  .stack { background-color: #bff5ff; }        /* スタック系 */
+  .io { background-color: #ffbe9c; }           /* I/O系 */
+  .regster { background-color: #efbaf9}        /* regster系 */
+  .regster16 { background-color: #ff9dd9}      /* regster16系 */
+  .flags { background-color: #ff8888}          /* flags系 */
+  details { margin-bottom: 15px; }
+  summary { cursor: pointer; font-weight: bold; font-size: 1.1em; }
+  .category { margin-left: 15px; }
+</style>
+</head>
+<body>
+
+<h1>8bit CPUアーキテクチャ設計書</h1>
+
+<details open>
+    <h1>8bit CPU Emulator</h1>
+    <p>ここからCPUエミュレータにアクセスできます</p>
+    <a class="button" href="cpu.html">CPUエミュレータを開く</a>
+</details>
+
+<details open>
+  <summary>レジスタ仕様</summary>
+  <div class="category">
+    <details open>
+        <summary>レジスタ仕様</summary>
+        <h2>レジスタ仕様</h2>
+        <table>
+            <tr class="regster"><th>レジスタ</th><th>ビット幅</th><th>用途</th></tr>
+            <tr class="regster"><td>A</td><td>8</td><td>アキュムレータ（主要演算用）</td></tr>
+            <tr class="regster"><td>B, C, D, E, F, G</td><td>8</td><td>汎用レジスタ</td></tr>
+            <tr class="regster"><td>H, L</td><td>8</td><td>アドレス指定用汎用レジスタ（HLペアで16bitアクセス可能）</td></tr>
+            <tr class="regster16"><td>BC, DE, FG, HL</td><td>16</td><td>ペアレジスタとして16bit演算・アクセス可能</td></tr>
+            <tr class="regster16"><td>X, Y</td><td>16</td><td>16bit汎用アキュムレータ/演算用</td></tr>
+            <tr class="regster16"><td>J</td><td>16</td><td>I/Oアドレス指定用レジスタ</td></tr>
+            <tr class="regster16"><td>PC</td><td>16</td><td>プログラムカウンタ</td></tr>
+            <tr class="regster16"><td>SP</td><td>16</td><td>スタックポインタ</td></tr>
+            <tr class="flags"><td>FLAGS</td><td>8</td><td>Z I O N Q C S H</td></tr>
+        </table>
+    </details>
+
+    <details>
+        <summary>8bit / 16bit レジスタ指定</summary>
+        <h2>8bit / 16bit レジスタ指定</h2>
+        <table>
+            <tr class="regster"><th>8bitレジスタ</th><th>オペランド</th></tr>
+            <tr class="regster"><td>A</td><td>0000</td></tr>
+            <tr class="regster"><td>B</td><td>0001</td></tr>
+            <tr class="regster"><td>C</td><td>0010</td></tr>
+            <tr class="regster"><td>D</td><td>0011</td></tr>
+            <tr class="regster"><td>E</td><td>0100</td></tr>
+            <tr class="regster"><td>F</td><td>0101</td></tr>
+            <tr class="regster"><td>G</td><td>0110</td></tr>
+            <tr class="regster"><td>H</td><td>0111</td></tr>
+            <tr class="regster"><td>L</td><td>1000</td></tr>
+            <tr class="regster16"><th>16bitレジスタ</th><th>オペランド</th></tr>
+            <tr class="regster16"><td>BC</td><td>1001</td></tr>
+            <tr class="regster16"><td>DE</td><td>1010</td></tr>
+            <tr class="regster16"><td>FG</td><td>1011</td></tr>
+            <tr class="regster16"><td>HL</td><td>1100</td></tr>
+            <tr class="regster16"><td>X</td><td>1101</td></tr>
+            <tr class="regster16"><td>Y</td><td>1110</td></tr>
+            <tr class="regster16"><td>J</td><td>1111</td></tr>
+        </table>
+    </details>
+  </div>
+</details>
+
+<details open>
+  <summary>FLAGS詳細</summary>
+  <div class="category">
+    <details open>
+        <summary>FLAGS詳細</summary>
+        <h2>FLAGS詳細</h2>
+        <table>
+            <tr class="flags"><th>フラグ</th><th>意味</th></tr>
+            <tr class="flags"><td>Z</td><td>結果が0の場合セット</td></tr>
+            <tr class="flags"><td>I</td><td>I/Oアクセス時にセット</td></tr>
+            <tr class="flags"><td>O</td><td>算術オーバーフロー時セット</td></tr>
+            <tr class="flags"><td>N</td><td>演算タイプフラグ（AでADD=1、SUB=0）</td></tr>
+            <tr class="flags"><td>Q</td><td>比較結果が等しい場合セット</td></tr>
+            <tr class="flags"><td>C</td><td>キャリーフラグ（加算/減算でキャリー/ボロー発生時）</td></tr>
+            <tr class="flags"><td>H</td><td>半キャリーフラグ（上位4ビットへのキャリー判定）</td></tr>
+            <tr class="flags"><td>S</td><td>符号フラグ（結果の符号）</td></tr>
+        </table>
+    </details>
+
+    <details>
+    <summary>フラグレジスタ指定</summary>
+    <h2>フラグレジスタ指定</h2>
+        <table>
+            <tr class="flags"><th>フラグレジスタ</th><th>オペランド</th></tr>
+            <tr class="flags"><td>Z</td><td>000</td></tr>
+            <tr class="flags"><td>I</td><td>001</td></tr>
+            <tr class="flags"><td>O</td><td>010</td></tr>
+            <tr class="flags"><td>N</td><td>011</td></tr>
+            <tr class="flags"><td>Q</td><td>100</td></tr>
+            <tr class="flags"><td>C</td><td>101</td></tr>
+            <tr class="flags"><td>H</td><td>110</td></tr>
+            <tr class="flags"><td>S</td><td>111</td></tr>
+        </table>
+    </details>
+  </div>
+</details>
+
+<details open>
+  <summary>命令セット（8bit CPU）</summary>
+    <div class="category">
+        <details open>
+            <summary>ロード系命令</summary>
+            <h3 style="color:#1f618d;">ロード系命令</h3>
+            <table>
+                <tr class="load"><th>命令</th><th>内容</th><th>例</th><th>備考</th></tr>
+                <tr class="load"><td>LOAD</td><td>8bitレジスタに値をロード</td><td>LOAD A, [HL]</td><td>メモリアクセス可能</td></tr>
+                <tr class="load"><td>STORE</td><td>8bitレジスタの値を保存</td><td>STORE A, [HL]</td><td>HLペアのみ</td></tr>
+                <tr class="load"><td>LOAD16</td><td>16bitレジスタにロード</td><td>LOAD16 BC, [HL]</td><td>ペアレジスタ対応</td></tr>
+                <tr class="load"><td>STORE16</td><td>16bitレジスタを保存</td><td>STORE16 BC, [HL]</td><td>HLペアのみ</td></tr>
+                <tr class="load"><td>MOV / MOV16</td><td>レジスタ間コピー</td><td>MOV B, C / MOV16 BC, DE</td><td>8bit / 16bit</td></tr>
+                <tr class="load"><td>PAIR / UNPAIR</td><td>レジスタペア化 / 分解</td><td>PAIR B, C / UNPAIR BC</td><td>8bit ↔ 16bit</td></tr>
+            </table>
+        </details>
+
+        <details open>
+            <summary>算術・論理演算系命令</summary>
+            <h3 style="color:#196f3d;">算術・論理演算系</h3>
+            <table>
+                <tr class="arith"><th>命令</th><th>内容</th><th>例</th><th>備考</th></tr>
+                <tr class="arith"><td>ADD / SUB / MUL / DIV</td><td>8bit演算（加減乗除）</td><td>ADD A, B / SUB A, 5</td><td>Aに即値 or レジスタ</td></tr>
+                <tr class="arith"><td>ADD16 / SUB16</td><td>16bit演算</td><td>ADD16 BC, DE</td><td>FLAGS更新</td></tr>
+                <tr class="arith"><td>INC / DEC</td><td>8bit増減</td><td>INC A / DEC B</td><td>FLAGS更新</td></tr>
+                <tr class="arith"><td>INC16 / DEC16</td><td>16bit増減</td><td>INC16 BC / DEC16 DE</td><td>FLAGS更新</td></tr>
+                <tr class="arith"><td>AND / OR / XOR / NOT</td><td>8bit論理演算</td><td>AND A, B / XOR C, D</td><td>FLAGS更新</td></tr>
+                <tr class="arith"><td>AND16 / XOR16</td><td>16bit論理演算</td><td>AND16 BC, DE</td><td>FLAGS更新</td></tr>
+            </table>
+        </details>
+
+        <details>
+            <summary>比較系命令</summary>
+            <h3 style="color:#7d3c98;">比較系命令</h3>
+            <table>
+                <tr><th>命令</th><th>内容</th><th>例</th><th>備考</th></tr>
+                <tr class="cmp"><td>CMP</td><td>A + Bを比較</td><td>CMP A, B, Z</td><td>FLAGS更新</td></tr>
+                <tr class="cmp"><td>CNP</td><td>A - Bを比較</td><td>CNP A, B, Z</td><td>FLAGS更新</td></tr>
+            </table>
+        </details>
+
+        <details open>
+            <summary>ジャンプ系命令</summary>
+            <h3 style="color:#b03a2e;">ジャンプ系命令</h3>
+            <table>
+                <tr class="jump"><th>命令</th><th>内容</th><th>例</th><th>備考</th></tr>
+                <tr class="jump"><td>JMP / JMP16</td><td>無条件ジャンプ</td><td>JMP HL / JMP16 HL</td><td>8bit/16bit対応</td></tr>
+                <tr class="jump"><td>J[FlagReg]</td><td>条件ジャンプ（正方向）</td><td>JZ H</td><td>FLAGS条件判定</td></tr>
+                <tr class="jump"><td>JN[FlagReg]</td><td>条件ジャンプ（負方向）</td><td>JNZ H</td><td>FLAGS条件判定</td></tr>
+                <tr class="jump"><td>J[FlagReg]16</td><td>16bit条件ジャンプ（正方向）</td><td>JZ16 H</td><td>FLAGS条件判定</td></tr>
+                <tr class="jump"><td>JN[FlagReg]16</td><td>16bit条件ジャンプ（負方向）</td><td>JNZ16 H</td><td>FLAGS条件判定</td></tr>
+            </table>
+        </details>
+
+        <details>
+            <summary>シフト・ローテート系命令</summary>
+            <h3 style="color:#117a65;">シフト・ローテート系</h3>
+            <table>
+                <tr class="shift"><th>命令</th><th>内容</th><th>例</th><th>備考</th></tr>
+                <tr class="shift"><td>ROL / ROR</td><td>左/右ローテート</td><td>ROL A / ROR B</td><td>A << imm / A >> imm（循環）</td></tr>
+                <tr class="shift"><td>SHL / SHR</td><td>左/右シフト</td><td>SHL A / SHR B</td><td>A << imm / A >> imm</td></tr>
+            </table>
+        </details>
+
+        <details>
+            <summary>スタック操作系命令</summary>
+            <h3 style="color:#af7ac5;">スタック操作系</h3>
+            <table>
+                <tr class="stack"><th>命令</th><th>内容</th><th>例</th><th>備考</th></tr>
+                <tr class="stack"><td>PUSH / POP</td><td>スタック操作</td><td>PUSH A / POP A</td><td>SP操作</td></tr>
+            </table>
+        </details>
+
+        <details open>
+            <summary>I/O操作系命令</summary>
+            <h3 style="color:#d68910;">I/O操作系命令</h3>
+            <table>
+                <tr class="io"></tr><th>命令</th><th>内容</th><th>例</th><th>備考</th></tr>
+                <tr class="io"></tr><td>IN / OUT</td><td>I/Oポートアクセス</td><td>IN A, J / OUT J, A</td><td>Iフラグセット</td></tr>
+            </table>
+        </details>
+
+        <details open>
+            <summary>メモリアクセス制約</summary>
+            <h3>メモリアクセス制約</h3>
+            <ul>
+                <li>HLペアでRAMアドレスのみアクセス可能。</li>
+                <li>ROMやI/O領域へのHLアクセスは禁止。</li>
+            </ul>
+        </details>
+    </div>
+</details>
+
+<details open>
+    <summary>マシン語命令セット（Opcode + Operand）</summary>
+    <div class="category">
+    <h2>マシン語命令セット（Opcode + Operand）</h2>
+    <p>命令は 8bit マシン語で表現され、1バイト目が <strong>Opcode</strong>、続くバイトが <strong>Operand</strong> です。</p>
+
+    <h3>Opcode 一覧</h3>
+    <details open>
+    <summary>命令セット（8bit CPU）</summary>
+        <details open>
+            <summary>ロード系</summary>
+            <h3>ロード系</h3>
+            <table>
+                <tr><th>Opcode</th><th>命令</th><th>説明</th></tr>
+                <tr class="load"><td>01</td><td>LOAD</td><td>8bitレジスタロード（A ← 即値または [HL]）</td></tr>
+                <tr class="load"><td>02</td><td>STORE</td><td>8bitレジスタ保存（レジスタ → [HL]）</td></tr>
+                <tr class="load"><td>03</td><td>LOAD16</td><td>16bitレジスタロード（reg16 ← [HL]）</td></tr>
+                <tr class="load"><td>04</td><td>STORE16</td><td>16bitレジスタ保存（reg16 → [HL]）</td></tr>
+                <tr class="load"><td>10</td><td>MOV</td><td>8bitレジスタ間コピー</td></tr>
+                <tr class="load"><td>11</td><td>MOV16</td><td>16bitレジスタ間コピー</td></tr>
+                <tr class="load"><td>20</td><td>PAIR</td><td>8bitレジスタペア化</td></tr>
+                <tr class="load"><td>21</td><td>UNPAIR</td><td>16bitレジスタ分解</td></tr>
+            </table>
+        </details>
+
+        <details open>
+            <summary>算術・論理演算系命令</summary>
+            <h3>算術・論理演算系命令</h3>
+            <table>
+                <tr><th>Opcode</th><th>命令</th><th>説明</th></tr>
+                <tr class="arith"><td>30</td><td>ADD</td><td>8bit加算（A ← A + operand）</td></tr>
+                <tr class="arith"><td>31</td><td>SUB</td><td>8bit減算（A ← A - operand）</td></tr>
+                <tr class="arith"><td>32</td><td>MUL</td><td>8bit乗算（A ← A * operand）</td></tr>
+                <tr class="arith"><td>33</td><td>DIV</td><td>8bit除算（A ← A / operand）</td></tr>
+                <tr class="arith"><td>34</td><td>ADD16</td><td>16bit加算（reg16 ← reg16 + reg16）</td></tr>
+                <tr class="arith"><td>35</td><td>SUB16</td><td>16bit減算（reg16 ← reg16 - reg16）</td></tr>
+                <tr class="arith"><td>36</td><td>INC</td><td>8bitインクリメント（reg++）</td></tr>
+                <tr class="arith"><td>37</td><td>DEC</td><td>8bitデクリメント（reg--）</td></tr>
+                <tr class="arith"><td>38</td><td>INC16</td><td>16bitインクリメント（reg16++）</td></tr>
+                <tr class="arith"><td>39</td><td>DEC16</td><td>16bitデクリメント（reg16--）</td></tr>
+                <tr class="arith"><td>40</td><td>AND</td><td>8bit論理積（reg & reg）</td></tr>
+                <tr class="arith"><td>41</td><td>OR</td><td>8bit論理和（reg | reg）</td></tr>
+                <tr class="arith"><td>42</td><td>XOR</td><td>8bit排他的論理和（reg ^ reg）</td></tr>
+                <tr class="arith"><td>43</td><td>NOT</td><td>8bit論理否定（~reg）</td></tr>
+                <tr class="arith"><td>44</td><td>AND16</td><td>16bit論理積</td></tr>
+                <tr class="arith"><td>45</td><td>XOR16</td><td>16bit排他的論理和</td></tr>
+            </table>
+        </details>
+
+        <details>
+            <summary>比較系命令</summary>
+            <h3>比較系命令</h3>
+            <table>
+                <tr><th>Opcode</th><th>命令</th><th>説明</th></tr>
+                <tr class="cmp"><td>50</td><td>CMP</td><td>A+Bの比較（FLAGS更新）</td></tr>
+                <tr class="cmp"><td>51</td><td>CNP</td><td>A-Bの比較（FLAGS更新）</td></tr>
+            </table>
+        </details>
+
+        <details open>
+            <summary>ジャンプ系命令</summary>
+            <h3>ジャンプ系命令</h3>
+            <table>
+                <tr><th>Opcode</th><th>命令</th><th>説明</th></tr>
+                <tr class="jump"><td>FF</td><td>JMP</td><td>無条件ジャンプ（8bit/16bitアドレス）</td></tr>
+                <tr class="jump"><td>F0</td><td>J[FlagReg]</td><td>条件ジャンプ（正方向）</td></tr>
+                <tr class="jump"><td>F1</td><td>JN[FlagReg]</td><td>条件ジャンプ（負方向）</td></tr>
+                <tr class="jump"><td>F2</td><td>J[FlagReg]16</td><td>16bit条件ジャンプ（正方向）</td></tr>
+                <tr class="jump"><td>F3</td><td>JN[FlagReg]16</td><td>16bit条件ジャンプ（負方向）</td></tr>
+            </table>
+        </details>
+
+        <details>
+            <summary>シフト・ローテート系命令</summary>
+            <h3>シフト・ローテート系命令</h3>
+            <table>
+                <tr><th>Opcode</th><th>命令</th><th>説明</th></tr>
+                <tr class="shift"><td>90</td><td>ROL</td><td>左ローテート（8bitレジスタ << imm）</td></tr>
+                <tr class="shift"><td>91</td><td>ROR</td><td>右ローテート（8bitレジスタ >> imm）</td></tr>
+                <tr class="shift"><td>92</td><td>SHL</td><td>左シフト（8bitレジスタ << imm）</td></tr>
+                <tr class="shift"><td>93</td><td>SHR</td><td>右シフト（8bitレジスタ >> imm）</td></tr>
+            </table>
+        </details>
+
+        <details>
+            <summary>スタック操作系命令</summary>
+            <h3>スタック操作系命令</h3>
+            <table>
+                <tr><th>Opcode</th><th>命令</th><th>説明</th></tr>
+                <tr class="stack"><td>A0</td><td>PUSH</td><td>8bitレジスタをスタックに保存 (SP操作)</td></tr>
+                <tr class="stack"><td>A1</td><td>POP</td><td>スタックから8bitレジスタに復帰 (SP操作)</td></tr>
+            </table>
+        </details>
+
+        <details open>
+            <summary>I/O操作系命令</summary>
+            <h3>I/O操作系命令</h3>
+            <table>
+                <tr><th>Opcode</th><th>命令</th><th>説明</th></tr>
+                <tr class="io"><td>B0</td><td>IN</td><td>I/Oポートから8bitレジスタへ読み込み、Iフラグセット</td></tr>
+                <tr class="io"><td>B1</td><td>OUT</td><td>8bitレジスタからI/Oポートへ出力、Iフラグセット</td></tr>
+            </table>
+        </details>
+
+        <details>
+            <summary>メモリアクセス制約</summary>
+            <h3>メモリアクセス制約</h3>
+            <ul>
+                <li>HLペアでRAMアドレスのみアクセス可能。</li>
+                <li>ROMやI/O領域へのHLアクセスは禁止（弾かれる）。</li>
+            </ul>
+        </details>
+
+        <details open>
+            <summary>Operand 書式</summary>
+            <h3>Operand 書式</h3>
+            <table>
+                <tr><th>値</th><th>意味</th></tr>
+                <tr><td>0x00～0x08</td><td>8bitレジスタ (A～L)</td></tr>
+                <tr><td>0x09～0x0F</td><td>16bitレジスタ (BC～J)</td></tr>
+                <tr><td>0x00～0xFF</td><td>即値 8bit</td></tr>
+                <tr><td>0x0000～0xFFFF</td><td>16bitメモリアドレス (高位バイト, 低位バイト)</td></tr>
+            </table>
+        </details>
+
+        <details>
+            <summary>使用例</summary>
+            <h3>使用例</h3>
+            <ul>
+            <h3>ロード系</h3>
+            <li class="load"><code>01 12</code> → LOAD A, 0x12</li>
+            <li class="load"><code>02 00</code> → STORE A, [HL]</li>
+            <li class="load"><code>03 01</code> → LOAD16 BC, [HL]</li>
+            <li class="load"><code>10 01 02</code> → MOV B, C</li>
+            <li class="load"><code>20 01 02</code> → PAIR B, C</li>
+            <h3>算術・論理演算系</h3>
+            <li class="arith"><code>30 01</code> → ADD A, B</li>
+            <li class="arith"><code>34 09 0A</code> → ADD16 BC, DE</li>
+            <h3>比較系</h3>
+            <li class="cmp"><code>50 01 02 00</code> → CMP A, B, Z</li>
+            <h3>ジャンプ系</h3>
+            <li class="jump"><code>FF 20 00</code> → JMP 0x2000</li>
+            <h3>シフト・ローテート系</h3>
+            <li class="shift"><code>90 00 02</code> → ROL A 2ビット</li>
+            <li class="shift"><code>91 01 01</code> → ROR B 1ビット</li>
+            <li class="shift"><code>92 02 03</code> → SHL C 3ビット</li>
+            <li class="shift"><code>93 03 01</code> → SHR D 1ビット</li>
+            <h3>スタック操作系</h3>
+            <li class="stack"><code>A0 00</code> → PUSH A</li>
+            <li class="stack"><code>A1 00</code> → POP A</li>
+            <h3>I/O操作系</h3>
+            <li class="io"><code>B0 0F</code> → IN A, J</li>
+            <li class="io"><code>B1 0F</code> → OUT J, A</li>
+            </ul>
+        </details>
+    </div>
+</details>
+
+</body>
+</html>
